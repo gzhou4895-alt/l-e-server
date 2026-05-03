@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
+        # 所有的步骤默认都在此目录下执行
         working-directory: ./Android/src
 
     steps:
@@ -40,16 +41,21 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > app/release.keystore
+          # 将 keystore 生成在当前工作目录（Android/src）下
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+          # 获取绝对路径，供下一步使用
+          echo "KEYSTORE_PATH=$(pwd)/release.keystore" >> $GITHUB_ENV
 
       - name: 编译 Release APK
+        if: github.event_name != 'pull_request'
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          # 使用绝对路径引用的签名文件，避免 Gradle 模块路径偏移
           ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=app/release.keystore \
+            -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
@@ -57,6 +63,7 @@ jobs:
       - name: 找到 APK 文件
         if: github.event_name != 'pull_request'
         run: |
+          # 寻找生成的 APK 并保存路径
           APK_PATH=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
           echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
           echo "APK_NAME=$(basename "$APK_PATH")" >> $GITHUB_ENV
@@ -66,6 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APK_NAME }}
+          # 此处的路径需包含相对于项目根目录的全路径
           path: Android/src/${{ env.APK_PATH }}
 
       - name: 创建 Release 并上传 APK
@@ -73,6 +81,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "汉化版 - ${{ github.sha }}"
+          tag_name: build-${{ github.run_number }}
           body: |
             ## 📱 Mobile Server 汉化版
             
@@ -85,5 +94,4 @@ jobs:
             ---
             *由 GitHub Actions 自动构建*
           files: Android/src/${{ env.APK_PATH }}
-          tag_name: build-${{ github.run_number }}
           generate_release_notes: false
