@@ -15,6 +15,10 @@ jobs:
   build_apk:
     name: Build Android APK
     runs-on: ubuntu-latest
+    # --- 关键修复：添加写入权限 ---
+    permissions:
+      contents: write
+    # ---------------------------
     defaults:
       run:
         # 所有的步骤默认都在此目录下执行
@@ -77,10 +81,12 @@ jobs:
           path: Android/src/${{ env.APK_PATH }}
 
       - name: 创建 Release 并上传 APK
+        # 仅在 push 到 main 分支时执行
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           name: "汉化版 - ${{ github.sha }}"
+          # 使用构建号作为标签名，例如 build-1, build-2
           tag_name: build-${{ github.run_number }}
           body: |
             ## 📱 Mobile Server 汉化版
@@ -95,3 +101,5 @@ jobs:
             *由 GitHub Actions 自动构建*
           files: Android/src/${{ env.APK_PATH }}
           generate_release_notes: false
+          # 如果标签已存在则覆盖（可选）
+          overwrite: true
